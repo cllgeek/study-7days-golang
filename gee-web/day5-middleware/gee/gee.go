@@ -3,9 +3,10 @@ package gee
 import (
 	"log"
 	"net/http"
+	"strings"
 )
 
-// HandlerFunc defines the request hanlder used by gee
+// HandlerFunc defines the request handler used by gee
 type HandlerFunc func(*Context)
 
 // Engine implement the interface of ServeHTTP
@@ -45,6 +46,11 @@ func (group *RouterGroup) Group(prefix string) *RouterGroup {
 	return newGroup
 }
 
+// Use is defined to add middleware to the group
+func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
+	group.middlewares = append(group.middlewares, middlewares...)
+}
+
 func (group *RouterGroup) addRoute(method string, comp string, handler HandlerFunc) {
 	pattern := group.prefix + comp
 	log.Printf("Route %4s - %s", method, pattern)
@@ -57,8 +63,8 @@ func (group *RouterGroup) GET(pattern string, handler HandlerFunc) {
 }
 
 // POST defines the method to add POST request
-func (group *RouterGroup) POST(pattern string, hanlder HandlerFunc) {
-	group.addRoute("POST", pattern, hanlder)
+func (group *RouterGroup) POST(pattern string, handler HandlerFunc) {
+	group.addRoute("POST", pattern, handler)
 }
 
 // Run defines the method to start a http server
@@ -67,6 +73,13 @@ func (engine *Engine) Run(addr string) (err error) {
 }
 
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var middlewares []HandlerFunc
+	for _, group := range engine.groups {
+		if strings.HasPrefix(req.URL.Path, group.prefix) {
+			middlewares = append(middlewares, group.middlewares...)
+		}
+	}
 	c := newContext(w, req)
+	c.handlers = middlewares
 	engine.router.handle(c)
 }
